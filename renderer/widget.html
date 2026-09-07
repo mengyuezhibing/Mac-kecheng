@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Mac简易课程表</title>
+    <link rel="stylesheet" href="css/widget.css" />
+  </head>
+  <body>
+    <div class="widget" id="widget">
+      <!-- 今日课程视图 -->
+      <section class="view view-today" id="viewToday">
+        <header class="widget-head">
+          <div class="day-nav">
+            <button class="nav-arrow" id="dayPrev" title="查看上一天">‹</button>
+            <div class="date-line">
+              <span class="day-label" id="dayLabel">今天</span>
+              <span class="date-text" id="todayDate">—</span>
+              <span class="lunar-text" id="todayLunar"></span>
+            </div>
+            <button class="nav-arrow" id="dayNext" title="查看下一天">›</button>
+          </div>
+          <div class="week-text" id="todayWeek"></div>
+        </header>
+        <div class="course-list" id="todayCourses"></div>
+      </section>
+
+      <!-- 周历视图：以周为单位显示课程（周一 ~ 周日） -->
+      <section class="view view-week" id="viewWeek">
+        <header class="widget-head">
+          <div class="date-line">
+            <span class="week-text" id="weekTitle">—</span>
+          </div>
+        </header>
+        <div class="week-cols" id="weekCols"></div>
+      </section>
+
+      <div class="resize-grip" id="resizeGrip" title="拖拽缩放小组件"></div>
+      <div class="edit-hint" id="editHint">拖动移动位置 · 右下角缩放 · 点击其他位置或按 Esc 退出</div>
+    </div>
+
+    <script src="js/widget-render.js"></script>
+  </body>
+</html>

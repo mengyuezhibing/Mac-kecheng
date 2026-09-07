@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mac简易课程表 · 设置</title>
+    <link rel="stylesheet" href="css/main.css" />
+  </head>
+  <body>
+    <!-- 顶部拖动条：替代被隐藏的原生标题栏，按住可拖动窗口 -->
+    <div class="drag-bar"></div>
+    <div class="layout">
+      <aside class="sidebar">
+        <div class="brand">
+          <img class="brand-logo" src="assets/brand.png" alt="Mac简易课程表" />
+          <div class="brand-text">
+            <strong>Mac简易课程表</strong>
+            <span>本机解析 · 无需 AI</span>
+          </div>
+        </div>
+
+        <nav class="nav">
+          <button class="nav-item active" data-page="settings">基础设置</button>
+          <button class="nav-item" data-page="import">课表导入</button>
+          <button class="nav-item" data-page="courses">课程管理</button>
+          <button class="nav-item" data-action="widget-edit" id="navWidgetEdit">调整小组件位置 / 大小</button>
+          <button class="nav-item" data-action="widget-toggle" id="navWidgetToggle">显示 / 隐藏小组件</button>
+        </nav>
+
+        <div class="sidebar-footer">
+          <div class="week-badge" id="weekBadge">未设置开学日期</div>
+        </div>
+      </aside>
+
+      <main class="content">
+        <!-- 基础设置 -->
+        <section class="page active" id="page-settings">
+          <h1 class="page-title">基础设置</h1>
+
+          <div class="card">
+            <div class="card-title">学期与提醒</div>
+            <div class="form-row">
+              <label class="form-label" for="semesterStart">开学第一周的周一</label>
+              <input type="date" id="semesterStart" class="input" />
+              <p class="form-hint">程序依据该日期自动计算当前教学周。</p>
+            </div>
+
+            <div class="form-row inline">
+              <div class="form-col">
+                <label class="form-label">上课通知</label>
+                <label class="switch">
+                  <input type="checkbox" id="notifyEnabled" />
+                  <span class="slider"></span>
+                </label>
+              </div>
+              <div class="form-col">
+                <label class="form-label" for="notifyLeadMinutes">提前提醒（分钟）</label>
+                <input type="number" id="notifyLeadMinutes" class="input input-sm" min="5" max="30" step="1" />
+                <p class="form-hint">可填写 5 ~ 30 分钟。</p>
+              </div>
+            </div>
+
+            <div class="form-actions">
+              <button class="btn btn-secondary" id="btnDisableNotify">一键关闭全部提醒</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">外观</div>
+            <div class="form-row inline">
+              <div class="form-col">
+                <label class="form-label" for="themeMode">主题模式（主窗口 + 小组件）</label>
+                <select id="themeMode" class="input input-sm">
+                  <option value="system">跟随系统</option>
+                  <option value="light">始终浅色</option>
+                  <option value="dark">始终深色</option>
+                </select>
+              </div>
+              <div class="form-col">
+                <label class="form-label">小组件显示模式</label>
+                <select id="widgetMode" class="input input-sm">
+                  <option value="today">今日课程视图</option>
+                  <option value="week">周历视图</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-row inline">
+              <div class="form-col">
+                <label class="form-label">开机自动启动</label>
+                <label class="switch">
+                  <input type="checkbox" id="launchAtLogin" />
+                  <span class="slider"></span>
+                </label>
+              </div>
+              <div class="form-col">
+                <p class="form-hint">开启后，登录当前系统账户时自动运行本应用（与系统“登录项”设置同步）。</p>
+              </div>
+            </div>
+            <div class="form-row inline">
+              <div class="form-col">
+                <label class="form-label">允许鼠标点击小组件</label>
+                <label class="switch">
+                  <input type="checkbox" id="widgetInteractive" />
+                  <span class="slider"></span>
+                </label>
+              </div>
+              <div class="form-col">
+                <p class="form-hint">
+                  关闭时小组件贴在桌面层，鼠标点不到（纯展示，不打扰其它窗口）；开启后变为普通窗口层级，可以用鼠标点顶部
+                  ‹ › 切换今天 / 明天、右键菜单，代价是会被其它应用窗口遮住。
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">自定义背景</div>
+            <p class="form-hint">选择一张图片作为小组件背景（图片会被复制到应用数据目录）。留空则使用系统风格半透明背景。</p>
+            <div class="form-actions">
+              <button class="btn btn-secondary" id="btnPickBg">选择背景图片</button>
+              <button class="btn btn-secondary" id="btnClearBg">清除背景</button>
+            </div>
+            <div class="preview-wrap hidden" id="bgPreviewWrap">
+              <img id="bgPreview" class="preview" alt="背景预览" />
+              <div class="preview-meta" id="bgPathText"></div>
+            </div>
+            <div class="form-row" style="margin-top: 14px">
+              <div class="form-col">
+                <label class="form-label">主窗口也使用该背景</label>
+                <label class="switch">
+                  <input type="checkbox" id="mainUsesBg" />
+                  <span class="slider"></span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">数据管理</div>
+            <p class="form-hint">配置与课表保存在本机 userdata 目录，可导出 JSON 备份或从此恢复。</p>
+            <div class="form-actions">
+              <button class="btn btn-secondary" id="btnExport">导出备份 JSON</button>
+              <button class="btn btn-secondary" id="btnImport">从备份恢复</button>
+            </div>
+            <div class="form-actions" style="margin-top: 12px">
+              <button class="btn btn-ghost" id="btnReopenWizard">重新运行首次引导向导</button>
+            </div>
+            <p class="form-hint">引导向导会带你快速完成开学日期、外观、背景、开机自启与课表导入设置。</p>
+          </div>
+
+          <div class="form-actions sticky-actions">
+            <button class="btn btn-primary" id="btnSaveSettings">保存设置</button>
+          </div>
+        </section>
+
+        <!-- 课表导入 -->
+        <section class="page" id="page-import">
+          <h1 class="page-title">课表导入</h1>
+          <div class="tabs">
+            <button class="tab active" data-tab="url">网址导入</button>
+            <button class="tab" data-tab="html">表格 / 源码导入</button>
+          </div>
+
+          <div class="card tab-pane active" id="pane-url">
+            <div class="card-title">输入教务课表网址</div>
+            <p class="form-hint">
+              方式 1（推荐，适用于需要登录的教务系统）：填写网址 → 点「用内置浏览器打开并登录」→ 在弹出窗口里自行登录并进入课表页面 → 回到本窗口点「抓取当前页面并解析」。<br />
+              方式 2：课表页面无需登录即可访问时，填写网址后直接点「直接抓取并解析」。<br />
+              说明：程序只在你点击抓取时读取当前页面源码，在本机按规则解析，不自动登录、不保存账号密码、不联网、不使用任何 AI。
+            </p>
+            <div class="form-row">
+              <label class="form-label" for="scheduleUrl">课表网页地址</label>
+              <input type="text" id="scheduleUrl" class="input" placeholder="https://jwxt.example.edu.cn/..." />
+            </div>
+            <div class="form-actions">
+              <button class="btn btn-secondary" id="btnOpenUrl">用内置浏览器打开并登录</button>
+              <button class="btn btn-primary" id="btnGrabBrowser">抓取当前页面并解析</button>
+              <button class="btn btn-ghost" id="btnFetchUrl">直接抓取并解析（免登录页面）</button>
+            </div>
+            <p class="form-hint" id="urlStatus">尚未打开网页</p>
+            <div class="form-actions">
+              <button class="btn btn-ghost" id="btnDebugInput">查看上次导入识别到的表格（排查用）</button>
+            </div>
+          </div>
+
+          <div class="card tab-pane" id="pane-html">
+            <div class="card-title">粘贴课表表格或网页源码</div>
+            <p class="form-hint">
+              在教务课表页面框选课表内容复制粘贴即可（表格文本就行），也可右键「查看网页源代码」全选复制后粘贴。
+              解析在本机按规则完成，不联网、不使用 AI。<strong style="color: var(--danger)"
+                >注意：粘贴的是表格内容，不是网址链接</strong
+              >（只填网址请改用上方「网址导入」）。
+            </p>
+            <textarea id="htmlSource" class="textarea" placeholder="在此粘贴课表表格文本或网页源码…"></textarea>
+            <div class="form-actions">
+              <button class="btn btn-primary" id="btnParseHtml">开始解析</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- 课程管理 -->
+        <section class="page" id="page-courses">
+          <h1 class="page-title">课程管理</h1>
+          <div class="tip hidden" id="pendingTip">解析结果尚未保存，请核对后点击「保存课表」。</div>
+
+          <div class="semester-bar">
+            <span class="semester-label">当前学期</span>
+            <select id="semesterSelect" class="input input-sm"></select>
+            <button class="btn btn-secondary" id="btnSemesterNew">新建学期</button>
+            <button class="btn btn-ghost" id="btnSemesterRename">重命名</button>
+            <button class="btn btn-ghost" id="btnSemesterDelete">删除</button>
+            <span class="form-hint semester-hint"
+              >每学期一份课表（含开学日期），切换后旧课表仍然保留，不用每学期重新导入。</span
+            >
+          </div>
+
+          <div class="course-toolbar">
+            <div class="view-switch">
+              <button class="seg active" data-course-view="list">列表编辑</button>
+              <button class="seg" data-course-view="week">周课表</button>
+            </div>
+            <div class="toolbar-right">
+              <span class="count-text" id="courseCount">共 0 门课程</span>
+              <div class="toolbar-actions">
+                <button class="btn btn-secondary" id="btnAddCourse">新增课程</button>
+                <button class="btn btn-primary" id="btnSaveCourses">保存课表</button>
+              </div>
+            </div>
+          </div>
+          <div id="courseWeekView" class="week-view hidden">
+            <div class="week-toolbar">
+              <label class="form-label" for="weekPicker">周次</label>
+              <select id="weekPicker" class="input input-sm"></select>
+              <span class="form-hint" id="weekPickerHint"></span>
+            </div>
+            <div class="week-grid" id="weekGrid"></div>
+            <p class="form-hint">周课表按上课时间自动分行；点击某一节课可直接编辑。</p>
+          </div>
+          <div class="course-table" id="courseListView">
+            <div class="course-head">
+              <span>课程名称</span>
+              <span>教师</span>
+              <span>地点</span>
+              <span>星期</span>
+              <span>时间</span>
+              <span>周次</span>
+              <span>周类型</span>
+              <span>操作</span>
+            </div>
+            <div id="courseList" class="course-list"></div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <!-- 课程编辑弹窗 -->
+    <div class="modal-mask hidden" id="courseModal">
+      <div class="modal">
+        <div class="modal-title" id="modalTitle">编辑课程</div>
+        <div class="modal-body">
+          <div class="form-row">
+            <label class="form-label" for="fCourseName">课程名称</label>
+            <input type="text" id="fCourseName" class="input" placeholder="高等数学" />
+          </div>
+          <div class="form-row inline">
+            <div class="form-col">
+              <label class="form-label" for="fTeacher">授课教师</label>
+              <input type="text" id="fTeacher" class="input" />
+            </div>
+            <div class="form-col">
+              <label class="form-label" for="fLocation">上课地点</label>
+              <input type="text" id="fLocation" class="input" placeholder="教三 301" />
+            </div>
+          </div>
+          <div class="form-row inline">
+            <div class="form-col">
+              <label class="form-label" for="fWeekday">星期</label>
+              <select id="fWeekday" class="input">
+                <option value="周一">周一</option>
+                <option value="周二">周二</option>
+                <option value="周三">周三</option>
+                <option value="周四">周四</option>
+                <option value="周五">周五</option>
+                <option value="周六">周六</option>
+                <option value="周日">周日</option>
+              </select>
+            </div>
+            <div class="form-col">
+              <label class="form-label" for="fStartTime">开始时间</label>
+              <input type="time" id="fStartTime" class="input" />
+            </div>
+            <div class="form-col">
+              <label class="form-label" for="fEndTime">结束时间</label>
+              <input type="time" id="fEndTime" class="input" />
+            </div>
+          </div>
+          <div class="form-row inline">
+            <div class="form-col">
+              <label class="form-label" for="fStartWeek">起始周</label>
+              <input type="number" id="fStartWeek" class="input" min="1" max="52" />
+            </div>
+            <div class="form-col">
+              <label class="form-label" for="fEndWeek">结束周</label>
+              <input type="number" id="fEndWeek" class="input" min="1" max="52" />
+            </div>
+            <div class="form-col">
+              <label class="form-label" for="fWeekType">周类型</label>
+              <select id="fWeekType" class="input">
+                <option value="全周">全周</option>
+                <option value="单周">单周</option>
+                <option value="双周">双周</option>
+              </select>
+            </div>
+          </div>
+          <div class="modal-error hidden" id="modalError"></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" id="btnModalCancel">取消</button>
+          <button class="btn btn-primary" id="btnModalSave">保存</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 首次引导向导 -->
+    <div class="wizard-mask hidden" id="wizardMask">
+      <div class="wizard">
+        <div class="wizard-head">
+          <div class="wizard-steps" id="wizardSteps"></div>
+          <button class="wizard-close" id="wizardClose" title="跳过引导">跳过</button>
+        </div>
+
+        <div class="wizard-body">
+          <!-- 0 欢迎 -->
+          <section class="wizard-step" data-step="0">
+            <h2>欢迎使用 Mac简易课程表</h2>
+            <p class="wizard-desc">
+              几步即可完成基础设置：设置开学日期、外观、背景与开机自启，最后选择课表导入方式。
+              这些选项之后都可在「基础设置」中随时修改。
+            </p>
+          </section>
+
+          <!-- 1 开学日期 -->
+          <section class="wizard-step hidden" data-step="1">
+            <h2>设置开学日期</h2>
+            <p class="wizard-desc">填写本学期开学第一周的周一，程序据此自动计算当前教学周与今日课程。</p>
+            <div class="form-row">
+              <label class="form-label" for="wsSemesterStart">开学第一周的周一</label>
+              <input type="date" id="wsSemesterStart" class="input" />
+            </div>
+          </section>
+
+          <!-- 2 外观 -->
+          <section class="wizard-step hidden" data-step="2">
+            <h2>外观偏好</h2>
+            <p class="wizard-desc">主题模式会同时作用于主窗口与桌面小组件。</p>
+            <div class="form-row inline">
+              <div class="form-col">
+                <label class="form-label" for="wsThemeMode">主题模式</label>
+                <select id="wsThemeMode" class="input input-sm">
+                  <option value="system">跟随系统</option>
+                  <option value="light">始终浅色</option>
+                  <option value="dark">始终深色</option>
+                </select>
+              </div>
+              <div class="form-col">
+                <label class="form-label" for="wsWidgetMode">小组件显示模式</label>
+                <select id="wsWidgetMode" class="input input-sm">
+                  <option value="today">今日课程视图</option>
+                  <option value="week">周历视图</option>
+                </select>
+              </div>
+            </div>
+          </section>
+
+          <!-- 3 背景 -->
+          <section class="wizard-step hidden" data-step="3">
+            <h2>自定义背景（可选）</h2>
+            <p class="wizard-desc">为桌面小组件选择一张背景图，留空则使用系统风格半透明背景。</p>
+            <div class="form-actions">
+              <button class="btn btn-secondary" id="wsPickBg">选择背景图片</button>
+              <button class="btn btn-secondary" id="wsClearBg">清除背景</button>
+            </div>
+            <div class="preview-wrap hidden" id="wsBgPreviewWrap">
+              <img id="wsBgPreview" class="preview" alt="背景预览" />
+            </div>
+            <div class="form-row" style="margin-top: 14px">
+              <label class="form-label">主窗口也使用该背景</label>
+              <label class="switch">
+                <input type="checkbox" id="wsMainUsesBg" />
+                <span class="slider"></span>
+              </label>
+            </div>
+          </section>
+
+          <!-- 4 开机自启 -->
+          <section class="wizard-step hidden" data-step="4">
+            <h2>开机自动启动</h2>
+            <p class="wizard-desc">开启后，当前系统账户登录时会自动运行本应用（与系统“登录项”设置同步）。</p>
+            <div class="form-row inline">
+              <div class="form-col">
+                <label class="form-label">开机自动启动</label>
+                <label class="switch">
+                  <input type="checkbox" id="wsLaunchAtLogin" />
+                  <span class="slider"></span>
+                </label>
+              </div>
+              <div class="form-col">
+                <p class="form-hint">如需临时关闭，可在「系统设置 → 通用 → 登录项」中管理。</p>
+              </div>
+            </div>
+          </section>
+
+          <!-- 5 导入方式 -->
+          <section class="wizard-step hidden" data-step="5">
+            <h2>选择课表导入方式</h2>
+            <p class="wizard-desc">完成向导后可前往对应页面导入；也可稍后手动添加。</p>
+            <div class="wizard-options">
+              <button class="wizard-option" data-import="url">
+                <strong>网址导入（推荐）</strong>
+                <span>填写教务网址，内置浏览器打开后自己登录，一键抓取当前页面解析</span>
+              </button>
+              <button class="wizard-option" data-import="html">
+                <strong>粘贴课表表格 / 源码</strong>
+                <span>复制教务课表的表格内容或网页源码，本机按规则解析</span>
+              </button>
+              <button class="wizard-option" data-import="later">
+                <strong>稍后再说</strong>
+                <span>先跳过，之后在「课程管理」手动添加</span>
+              </button>
+            </div>
+          </section>
+
+          <!-- 6 完成 -->
+          <section class="wizard-step hidden" data-step="6">
+            <h2>设置完成 🎉</h2>
+            <p class="wizard-desc">基础配置已保存。接下来按你选择的方式导入课表，桌面小组件就会显示今日课程。</p>
+          </section>
+        </div>
+
+        <div class="wizard-footer">
+          <button class="btn btn-secondary" id="wizardPrev">上一步</button>
+          <div class="wizard-progress" id="wizardProgress"></div>
+          <button class="btn btn-primary" id="wizardNext">下一步</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="loading-mask hidden" id="loading">
+      <div class="spinner"></div>
+      <p id="loadingText">解析中，请稍候…</p>
+    </div>
+
+    <div class="toast hidden" id="toast"></div>
+
+    <script src="js/main-render.js"></script>
+  </body>
+</html>

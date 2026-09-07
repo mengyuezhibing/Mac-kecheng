@@ -1,0 +1,460 @@
+/* 小组件样式：高度模仿 macOS 系统日历小组件（大圆角、柔和背景、跟随系统深浅色）
+ * 自适应：渲染进程根据窗口宽高写入 --w-scale（缩放系数）与 data-size（s/m/l 三档），
+ * 所有字号、间距、圆角都基于 --w-scale 计算，内容随窗口大小同步变化，不会被裁切。
+ */
+:root {
+  --w-bg: rgba(250, 250, 250, 0.78);
+  --w-border: rgba(255, 255, 255, 0.7);
+  --w-text: #1d1d1f;
+  --w-sub: #86868b;
+  --w-accent: #ff3b30;
+  --w-today: #007aff;
+  --w-dot: #ff9f0a;
+  --w-row: rgba(120, 120, 128, 0.12);
+  --w-scrim: rgba(250, 250, 250, 0.34); /* 自定义背景上的柔光层，保证文字可读 */
+
+  --w-scale: 1; /* 由 JS 按窗口尺寸动态写入 */
+  --w-radius: calc(18px * var(--w-scale));
+}
+
+body[data-theme='dark'] {
+  --w-bg: rgba(38, 38, 41, 0.72);
+  --w-border: rgba(255, 255, 255, 0.14);
+  --w-text: #f5f5f7;
+  --w-sub: #98989d;
+  --w-accent: #ff453a;
+  --w-today: #0a84ff;
+  --w-row: rgba(255, 255, 255, 0.08);
+  --w-scrim: rgba(18, 18, 20, 0.42);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', sans-serif;
+  color: var(--w-text);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+.widget {
+  position: relative;
+  height: 100%;
+  padding: calc(14px * var(--w-scale)) calc(16px * var(--w-scale)) calc(16px * var(--w-scale));
+  background: var(--w-bg);
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  border: 1px solid var(--w-border);
+  border-radius: var(--w-radius);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
+  -webkit-app-region: drag; /* 像桌面图标一样：抓住任意位置都能拖动 */
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 课程列表可正常滚动，不触发拖动 */
+.course-list {
+  -webkit-app-region: no-drag;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-evenly;
+  overflow-y: auto;
+}
+
+/* 自定义背景图片：铺满小组件，叠加柔光层保证文字可读 */
+.widget.has-bg {
+  background-image: linear-gradient(var(--w-scrim), var(--w-scrim)), var(--w-bg-image);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+/* 编辑模式提示 */
+.edit-hint {
+  display: none;
+  position: absolute;
+  left: 50%;
+  bottom: calc(6px * var(--w-scale));
+  transform: translateX(-50%);
+  background: rgba(0, 122, 255, 0.92);
+  color: #fff;
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 10;
+}
+
+body.edit-mode .edit-hint {
+  display: block;
+}
+
+body.edit-mode .widget {
+  outline: 2px dashed rgba(0, 122, 255, 0.85);
+  outline-offset: 2px;
+}
+
+
+
+.view {
+  display: none;
+  flex: 1;
+  min-height: 0;
+}
+
+.view.active {
+  display: flex;
+  flex-direction: column;
+}
+
+.widget-head {
+  margin-bottom: calc(10px * var(--w-scale));
+}
+
+/* 日期切换：‹ 今天 / 明天 / 后天 › */
+.day-nav {
+  display: flex;
+  align-items: center;
+  gap: calc(4px * var(--w-scale));
+  min-width: 0;
+}
+
+.nav-arrow {
+  -webkit-app-region: no-drag;
+  flex: 0 0 auto;
+  width: calc(20px * var(--w-scale));
+  height: calc(20px * var(--w-scale));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: var(--w-row);
+  color: var(--w-sub);
+  font-size: calc(14px * var(--w-scale));
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.nav-arrow:hover {
+  color: var(--w-text);
+}
+
+.nav-arrow:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.day-label {
+  flex: 0 0 auto;
+  font-size: calc(12px * var(--w-scale));
+  font-weight: 600;
+  color: var(--w-accent);
+}
+
+.date-line {
+  display: flex;
+  align-items: baseline;
+  gap: calc(8px * var(--w-scale));
+  min-width: 0;
+}
+
+.date-text,
+.month-text {
+  font-size: calc(19px * var(--w-scale));
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+}
+
+.lunar-text {
+  font-size: calc(12px * var(--w-scale));
+  color: var(--w-sub);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.week-text {
+  margin-top: calc(2px * var(--w-scale));
+  font-size: calc(11px * var(--w-scale));
+  color: var(--w-sub);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 今日课程列表 */
+.course-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: calc(6px * var(--w-scale));
+}
+
+.course-item {
+  display: flex;
+  gap: calc(10px * var(--w-scale));
+  padding: calc(7px * var(--w-scale)) calc(9px * var(--w-scale));
+  border-radius: calc(10px * var(--w-scale));
+  background: var(--w-row);
+}
+
+.course-item .time {
+  flex: 0 0 calc(62px * var(--w-scale));
+  font-size: calc(11px * var(--w-scale));
+  color: var(--w-sub);
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
+
+.course-item .time .start {
+  display: block;
+  font-size: calc(13px * var(--w-scale));
+  font-weight: 600;
+  color: var(--w-text);
+}
+
+.course-item .info {
+  flex: 1;
+  min-width: 0;
+}
+
+.course-item .name {
+  font-size: calc(13px * var(--w-scale));
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.course-item .meta {
+  font-size: calc(11px * var(--w-scale));
+  color: var(--w-sub);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: calc(1px * var(--w-scale));
+}
+
+/* 教师：默认不显示，尺寸变大后自动出现（见下方 data-size 规则） */
+.course-item .teacher {
+  display: none;
+  font-size: calc(11px * var(--w-scale));
+  color: var(--w-sub);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: calc(1px * var(--w-scale));
+}
+
+.empty-tip {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--w-sub);
+  font-size: calc(13px * var(--w-scale));
+  text-align: center;
+}
+
+/* 周历视图：7 列（周一 ~ 周日），每列顶部星期 + 日期，下方列出当天课程 */
+.week-cols {
+  display: flex;
+  gap: calc(3px * var(--w-scale));
+  flex: 1;
+  min-height: 0;
+}
+
+.week-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: calc(8px * var(--w-scale));
+  background: rgba(255, 255, 255, 0.05);
+  padding: calc(3px * var(--w-scale));
+}
+
+.week-col.today {
+  background: var(--w-today);
+  color: #fff;
+}
+
+.wc-head {
+  font-size: calc(11px * var(--w-scale));
+  font-weight: 600;
+  text-align: center;
+  line-height: 1.2;
+  margin-bottom: calc(3px * var(--w-scale));
+}
+
+.wc-date {
+  display: block;
+  font-size: calc(9px * var(--w-scale));
+  opacity: 0.75;
+  font-weight: 400;
+}
+
+.wc-list {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: calc(2px * var(--w-scale));
+  justify-content: space-evenly;
+  overflow: hidden;
+}
+
+.wc-course {
+  display: flex;
+  flex-direction: column;
+  gap: calc(1px * var(--w-scale));
+  font-size: calc(9px * var(--w-scale));
+  line-height: 1.15;
+}
+
+.wc-time {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.wc-name {
+  white-space: normal;
+  word-break: break-word;
+}
+
+.wc-loc {
+  font-size: calc(8px * var(--w-scale));
+  opacity: 0.72;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wc-empty {
+  font-size: calc(10px * var(--w-scale));
+  opacity: 0.5;
+  text-align: center;
+  display: block;
+}
+
+/* 月历视图：格子高度随窗口高度均分，不会被裁切 */
+.weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  font-size: calc(11px * var(--w-scale));
+  color: var(--w-sub);
+  text-align: center;
+  margin-bottom: calc(4px * var(--w-scale));
+}
+
+.month-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  grid-auto-rows: 1fr;
+  gap: calc(2px * var(--w-scale));
+  flex: 1;
+  min-height: 0;
+}
+
+.cell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(12px * var(--w-scale));
+  border-radius: calc(8px * var(--w-scale));
+  font-variant-numeric: tabular-nums;
+  min-height: 0;
+}
+
+.cell.blank {
+  visibility: hidden;
+}
+
+.cell.today .num {
+  background: var(--w-today);
+  color: #fff;
+  width: calc(20px * var(--w-scale));
+  height: calc(20px * var(--w-scale));
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cell .dot {
+  position: absolute;
+  bottom: calc(2px * var(--w-scale));
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(4px * var(--w-scale));
+  height: calc(4px * var(--w-scale));
+  border-radius: 50%;
+  background: var(--w-dot);
+}
+
+/* ---------------------------------------------------------- 尺寸分级 */
+/* 小尺寸：隐藏农历、周次等次要信息，保证课程名与地点完整 */
+html[data-size='s'] .lunar-text,
+html[data-size='s'] .week-text {
+  display: none;
+}
+
+/* 中等及以上：显示教师 */
+html[data-size='m'] .course-item .teacher,
+html[data-size='l'] .course-item .teacher {
+  display: block;
+}
+
+/* 大尺寸：课程名允许换行，信息更完整 */
+html[data-size='l'] .course-item .name {
+  white-space: normal;
+  overflow: visible;
+  line-height: 1.25;
+}
+
+html[data-size='l'] .course-item {
+  padding: calc(9px * var(--w-scale)) calc(11px * var(--w-scale));
+}
+
+html[data-size='l'] .course-item .time {
+  flex: 0 0 calc(72px * var(--w-scale));
+}
+
+/* 缩放手柄 */
+.resize-grip {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  -webkit-app-region: no-drag;
+  opacity: 0.35;
+  background: linear-gradient(135deg, transparent 45%, var(--w-sub) 45%, var(--w-sub) 55%, transparent 55%),
+    linear-gradient(135deg, transparent 70%, var(--w-sub) 70%, var(--w-sub) 80%, transparent 80%);
+}
+
+.resize-grip:hover {
+  opacity: 0.8;
+}

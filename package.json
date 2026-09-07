@@ -1,0 +1,48 @@
+{
+  "name": "mac-simple-course-widget",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Mac 课表桌面小组件：Electron 悬浮模拟小组件 + 本机规则解析课表（无需 AI）",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "pack": "electron-builder --mac --arm64 --dir",
+    "dist": "electron-builder --mac --arm64"
+  },
+  "devDependencies": {
+    "electron": "^30.5.1",
+    "electron-builder": "^24.13.3"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "build": {
+    "appId": "com.local.mac-simple-course",
+    "productName": "Mac简易课程表",
+    "copyright": "Copyright © 2026",
+    "asar": true,
+    "asarUnpack": ["assets/**/*"],
+    "files": [
+      "main.js",
+      "preload-*.js",
+      "src/**/*",
+      "renderer/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "icon": "assets/icon.icns",
+      "category": "public.app-category.education",
+      "darkModeSupport": true,
+      "target": [
+        { "target": "dmg", "arch": ["arm64"] },
+        { "target": "zip", "arch": ["arm64"] }
+      ]
+    },
+    "dmg": {
+      "artifactName": "${productName}-${version}-arm64.dmg"
+    }
+  },
+  "license": "MIT"
+}
