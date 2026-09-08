@@ -23,6 +23,7 @@
     "appId": "com.local.mac-simple-course",
     "productName": "Mac简易课程表",
     "copyright": "Copyright © 2026",
+    "publish": null,
     "asar": true,
     "asarUnpack": ["assets/**/*"],
     "files": [

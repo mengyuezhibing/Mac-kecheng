@@ -34,14 +34,17 @@ jobs:
       - name: 构建 macOS 安装包（dmg + zip，arm64）
         run: npx electron-builder --mac --arm64
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 注意：这里刻意不设置 GH_TOKEN。否则 electron-builder 会启用自带的 GitHub 发布器，
+          # 上传中文名文件时（…zip.blockmap）会报 "Request path contains unescaped characters" 而失败。
+          # 发布统一交给下面的 softprops/action-gh-release 步骤。
           CSC_IDENTITY_AUTO_DISCOVERY: false # 没有 Apple 开发者证书，跳过签名（与本地打包一致）
 
       - name: 重命名为英文名（规避 GitHub 附件对中文名的编码问题）
         run: |
           cd dist
-          for f in Mac简易课程表-*.dmg; do [ -f "$f" ] && mv "$f" "MacKecheng-${f#Mac简易课程表-}"; done
-          for f in Mac简易课程表-*.zip; do [ -f "$f" ] && mv "$f" "MacKecheng-${f#Mac简易课程表-}"; done
+          shopt -s nullglob
+          for f in Mac简易课程表-*.dmg; do mv "$f" "MacKecheng-${f#Mac简易课程表-}"; done
+          for f in Mac简易课程表-*.zip; do mv "$f" "MacKecheng-${f#Mac简易课程表-}"; done
           ls -la
 
       - name: 上传构建产物（Actions 页面可下载）
