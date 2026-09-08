@@ -2,6 +2,7 @@
   "appId": "com.local.mac-simple-course",
   "productName": "简易课程表",
   "copyright": "Copyright © 2026",
+  "publish": null,
   "extraMetadata": {
     "main": "windows/main-win.js"
   },

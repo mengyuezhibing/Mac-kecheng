@@ -33,6 +33,8 @@ jobs:
 
       - name: 构建 Windows 安装包（NSIS 安装版 + 免安装版）
         run: npx electron-builder --win --x64 --config windows/electron-builder-win.json
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 上传构建产物（Actions 页面可下载）
         uses: actions/upload-artifact@v4
