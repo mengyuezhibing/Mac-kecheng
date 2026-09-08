@@ -17,6 +17,7 @@
  */
 const path = require('path');
 const fs = require('fs');
+const { execFile } = require('child_process'); // 调用 Windows API 置底小组件（见 sendWidgetToBottom）
 const {
   app,
   BrowserWindow,
@@ -169,6 +170,10 @@ function createMainWindow() {
   mainWindow.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
   mainWindow.on('closed', () => {
     mainWindow = null;
+  });
+  mainWindow.on('focus', () => {
+    // 主窗口激活时把小组件压回底层，保证主窗口内容不被遮挡
+    sendWidgetToBottom(widgetWindow);
   });
   mainWindow.webContents.once('did-finish-load', () => {
     pushTheme();
@@ -325,10 +330,38 @@ function persistWidgetBounds() {
 }
 
 /**
+ * 把小组件窗口沉到 Z 序最底部（仅 Windows 生效）。
+ *
+ * Windows 没有 macOS 的『桌面壁纸层级』（type:'desktop'），普通窗口会浮在其它应用之上、遮挡内容。
+ * 这里调用 user32 的 SetWindowPos(HWND_BOTTOM) 把窗口压到所有非置顶窗口之下，效果与 macOS 版一致：
+ * 小组件贴在桌面上，任何应用窗口打开时都会盖住它，不再遮挡其它页面。
+ *
+ * 借助 PowerShell 调用 Windows API（不引入原生依赖，避免打包时重新编译）；
+ * 失败时静默降级为普通窗口——虽可能位于同层最前，但不会置顶，其它窗口激活后依然会盖住它。
+ */
+function sendWidgetToBottom(win) {
+  if (process.platform !== 'win32' || !win || win.isDestroyed()) return;
+  let handle;
+  try {
+    handle = win.getNativeWindowHandle(); // Windows 上即 HWND
+  } catch (err) {
+    return;
+  }
+  if (!handle || !handle.length) return;
+  const value = handle.length >= 8 ? handle.readBigUInt64LE(0) : BigInt(handle.readUInt32LE(0));
+  const script = path.join(__dirname, 'assets', 'widget-bottom.ps1');
+  execFile(
+    'powershell.exe',
+    ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script, '-Handle', value.toString()],
+    { windowsHide: true, timeout: 15000 },
+    () => {}
+  );
+}
+
+/**
  * 创建小组件窗口（Windows 版）
- * Windows 没有 macOS 的『桌面壁纸层级』，这里用「无边框 + 置顶 + 不进任务栏」的窗口模拟：
- * - 置顶（alwaysOnTop）保证它像小组件一样常驻可见，但会浮在其它应用窗口之上（平台限制）；
- * - editable = true 时进入调整模式：可缩放、可聚焦，拖动/缩放结束后可「完成调整」回到展示态。
+ * - 展示态：不置顶，显示后调用 sendWidgetToBottom 沉到最底层，不遮挡其它应用窗口；
+ * - 调整态（editable = true）：临时置顶 + 可聚焦，方便拖动 / 缩放，「完成调整」后回到展示态。
  */
 function createWidgetWindow(editable = false) {
   const b = config.widgetBounds || {};
@@ -359,7 +392,7 @@ function createWidgetWindow(editable = false) {
     fullscreenable: false,
     show: false,
     title: '简易课程表',
-    alwaysOnTop: true, // Windows 上用置顶模拟桌面小组件
+    alwaysOnTop: !!editable, // 仅调整模式临时置顶；展示态沉到最底层，避免遮挡其它窗口
     // 展示态下不抢焦点（点击不夺走其它应用输入）；开启鼠标交互或调整模式时可聚焦，才能点箭头 / 右键
     focusable: editable || !!config.widgetInteractive,
     webPreferences: {
@@ -404,6 +437,8 @@ function createWidgetWindow(editable = false) {
       widgetWindow.focus();
     } else {
       widgetWindow.showInactive();
+      // 刚显示的窗口会位于同层最前，等系统完成窗口创建后压到最底层
+      setTimeout(() => sendWidgetToBottom(widgetWindow), 300);
     }
   });
   widgetWindow.webContents.once('did-finish-load', pushTheme);
@@ -523,6 +558,7 @@ function showWidget(show = true) {
     else {
       widgetWindow.showInactive();
       refreshWidget();
+      setTimeout(() => sendWidgetToBottom(widgetWindow), 200);
     }
   } else if (widgetWindow && !widgetWindow.isDestroyed()) {
     widgetWindow.destroy(); // 直接销毁渲染进程，减少常驻内存
@@ -567,10 +603,10 @@ function updateTrayMenu() {
 }
 
 function createTray() {
-  // Windows 无法解析 .icns，优先使用 assets/icon-win.png
+  // 与 macOS 版使用同一套图标：windows/assets/icon.png、icon.ico 均由 assets/icon.icns 提取而来，图案完全一致
   const candidates = [
-    path.join(__dirname, 'assets', 'icon-win.png'),
     path.join(__dirname, 'assets', 'icon.png'),
+    path.join(__dirname, 'assets', 'icon.ico'),
     path.join(__dirname, '..', 'assets', 'icon.icns')
   ];
   let image = nativeImage.createEmpty();

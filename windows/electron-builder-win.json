@@ -18,7 +18,7 @@
     "package.json"
   ],
   "win": {
-    "icon": "windows/assets/icon-win.png",
+    "icon": "windows/assets/icon.ico",
     "target": [
       { "target": "nsis", "arch": ["x64"] },
       { "target": "portable", "arch": ["x64"] }

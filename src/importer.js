@@ -14,7 +14,9 @@ const {
   periodTimesOf,
   mergeConsecutive,
   parseWeeks,
-  splitMulti
+  splitMulti,
+  splitCells,
+  findWeekday
 } = require('./parser');
 
 const HTML_LIMIT = 60000;
@@ -151,17 +153,15 @@ function parseCellCourse(text) {
 
 /** ② 单元格型周课表：时间 | 星期一 … 星期日 */
 function parseGridTable(lines, periodTimes) {
-  const headerIndex = lines.findIndex(
-    (line) => /时间|节次/.test(line) && /星期[一二三四五六日]|周[一二三四五六日]/.test(line)
+  // 各校周课表的表头写法差异很大（星期一 / 周一 / 只写星期…），这里放宽匹配，不再强制要求「时间 / 节次」字样
+  const headerIndex = lines.findIndex((line) =>
+    /星期[一二三四五六日]|周[一二三四五六日]|周一|周二|周三|周四|周五|周六|周日/.test(line)
   );
   if (headerIndex < 0) return null;
 
   const list = [];
   for (let i = headerIndex + 1; i < lines.length; i++) {
-    const cells = lines[i]
-      .split('|')
-      .map((c) => c.trim())
-      .filter((cell, index, arr) => !(index === arr.length - 1 && !cell));
+    const cells = splitCells(lines[i]);
     if (cells.length < 4) continue;
 
     // 数据行形如：上午 | 12节 | 周一 | 周二 | … → 节次列右边第一列就是周一
@@ -207,6 +207,90 @@ function parseGridTable(lines, periodTimes) {
   return list.length ? list : null;
 }
 
+/** 从一行自由文本里猜课程名：先抹掉星期 / 节次 / 时间 / 周次 / 括号等噪声，再取第一个词 */
+function guessCourseName(raw) {
+  const text = String(raw || '')
+    .replace(/(星期|周)\s*[一二三四五六日天]/g, ' ')
+    .replace(/第\s*\d{1,2}\s*[-~至]?\s*\d{0,2}\s*节/g, ' ')
+    .replace(/\d{1,2}\s*[-~至]\s*\d{1,2}\s*节?/g, ' ')
+    .replace(/\d{1,2}:\d{2}(\s*[-~至]\s*\d{1,2}:\d{2})?/g, ' ')
+    .replace(/\d{1,2}\s*[-~至]\s*\d{1,2}\s*周/g, ' ')
+    .replace(/[（(][^）)]*[）)]/g, ' ')
+    .replace(/[|/｜\t]/g, ' ');
+  const matched = /[\u4e00-\u9fa5A-Za-z][\u4e00-\u9fa5A-Za-z0-9·]{1,20}/.exec(text);
+  return matched ? matched[0].trim() : '';
+}
+
+/** 补零：8:5 → 08:05 */
+function padClock(hour, minute) {
+  return `${String(Number(hour)).padStart(2, '0')}:${String(Number(minute)).padStart(2, '0')}`;
+}
+
+/**
+ * ③ 兜底：逐行启发式提取
+ * 各校导出的纯文本排列千差万别，清单型 / 单元格型都匹配不上时，
+ * 只要一行里同时认得出「星期 + 节次或时间 + 课程名」就算一门课，之后可在「课程管理」里校正。
+ */
+function parseFreeText(lines, periodTimes) {
+  const list = [];
+  (lines || []).forEach((line) => {
+    const raw = String(line || '').trim();
+    if (!raw) return;
+
+    const weekday = findWeekday(raw, null);
+    if (!weekday) return;
+
+    const clock = /(\d{1,2}):(\d{2})\s*[-~至]\s*(\d{1,2}):(\d{2})/.exec(raw);
+    const range = /第?\s*(\d{1,2})\s*[-~至]\s*(\d{1,2})\s*节?/.exec(raw);
+    if (!clock && !range) return;
+
+    const courseName = guessCourseName(raw);
+    if (!courseName) return;
+
+    let startTime = '';
+    let endTime = '';
+    let sp = 0;
+    let ep = 0;
+    if (clock) {
+      startTime = padClock(clock[1], clock[2]);
+      endTime = padClock(clock[3], clock[4]);
+    } else {
+      sp = Number(range[1]);
+      ep = Number(range[2]);
+      if (sp > ep) {
+        const tmp = sp;
+        sp = ep;
+        ep = tmp;
+      }
+      if (!(sp >= 1 && ep <= 12)) return;
+      const start = periodTimes[sp];
+      const end = periodTimes[ep];
+      if (!start || !end) return;
+      startTime = start[0];
+      endTime = end[1];
+    }
+
+    const weeks = /(\d{1,2})\s*[-~至]\s*(\d{1,2})\s*周/.exec(raw);
+    const teacher = /([\u4e00-\u9fa5]{2,4})(?:老师|教师)/.exec(raw);
+    const location = /([^\s,，、|]{0,12}?(?:室|楼|馆|区|场|厅|中心))/.exec(raw);
+
+    list.push({
+      courseName,
+      teacher: teacher ? teacher[1] : '',
+      location: location ? location[1] : '',
+      weekday: ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][weekday % 7],
+      startTime,
+      endTime,
+      startWeek: weeks ? Number(weeks[1]) : 1,
+      endWeek: weeks ? Number(weeks[2]) : 16,
+      weekType: /单/.test(raw) ? '单周' : /双/.test(raw) ? '双周' : '全周',
+      _sp: sp,
+      _ep: ep
+    });
+  });
+  return list.length ? list : null;
+}
+
 /**
  * 导入入口：网页源码 / 表格文本 → 课程数组
  * @returns {{courses: Array, source: 'list'|'grid'|'', tables: string[]}}
@@ -237,6 +321,23 @@ function parseScheduleInput(input, customPeriodTimes) {
     if (courses.length) return { courses, source: 'grid', tables };
   }
 
+  // ③ 兜底：逐行启发式提取，兼容排列各异的纯文本（每个人的课表文字排列都可能不同）
+  let free = [];
+  tables.forEach((table) => {
+    const lines = table
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean);
+    const parsed = parseFreeText(lines, periodTimes);
+    if (parsed) free = free.concat(parsed);
+  });
+  if (free.length) {
+    const courses = mergeConsecutive(free)
+      .map((course) => normalizeCourse(course))
+      .filter((course) => course.courseName && course.startTime && course.endTime && course.weekday);
+    if (courses.length) return { courses, source: 'free', tables };
+  }
+
   return { courses: [], source: '', tables };
 }
 
@@ -245,5 +346,6 @@ module.exports = {
   parseScheduleInput,
   parsePeriods,
   parseGridTable,
+  parseFreeText,
   splitMulti
 };

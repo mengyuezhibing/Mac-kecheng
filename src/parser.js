@@ -34,14 +34,36 @@ const DEFAULT_PERIOD_TIMES = {
 
 const WEEKDAY_CN = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
 
-/** 表头列名别名（同字段多个别名，取最先命中的列） */
+/** 中文星期 → 数字（1 = 周一 … 7 = 周日） */
+const WEEKDAY_MAP = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 日: 7, 天: 7 };
+
+/**
+ * 从文本里识别星期：支持「星期一 / 周一 / 周 3 / 星期天」等写法
+ * @param {string} raw 原始文本
+ * @param {number|null} fallback 本行找不到时的备选星期（有些学校把星期单独列一列）
+ */
+function findWeekday(raw, fallback) {
+  const text = String(raw || '');
+  const cn = /(?:星期|周)\s*([一二三四五六日天])/.exec(text);
+  if (cn) return WEEKDAY_MAP[cn[1]];
+  const num = /(?:星期|周)\s*([1-7])/.exec(text);
+  if (num) return Number(num[1]);
+  return fallback || null;
+}
+
+/** 补零：8:5 → 08:05 */
+function padClock(hour, minute) {
+  return `${String(Number(hour)).padStart(2, '0')}:${String(Number(minute)).padStart(2, '0')}`;
+}
+
+/** 表头列名别名（同字段多个别名，取最先命中的列；别名尽量多，覆盖不同学校的叫法） */
 const COLUMN_ALIASES = {
-  courseName: ['课程名称', '课程名', '课程'],
-  teacher: ['任课教师', '授课教师', '教师'],
-  location: ['上课地点', '教室', '地点'],
-  weeks: ['上课周次', '起止周', '周次'],
-  time: ['上课时间', '节次', '时间'],
-  campus: ['校区']
+  courseName: ['课程名称', '课程名', '课名', '课程', '科目'],
+  teacher: ['任课教师', '授课教师', '主讲教师', '教师', '老师'],
+  location: ['上课地点', '上课教室', '教学地点', '教室', '地点'],
+  weeks: ['上课周次', '起止周', '上课周', '周次'],
+  time: ['上课时间', '上课节次', '节次', '上课时段', '时间'],
+  campus: ['校区', '教学区']
 };
 
 function periodTimesOf(custom) {
@@ -57,12 +79,52 @@ function periodTimesOf(custom) {
   return merged;
 }
 
-/** 按 | 切分表格行，去掉首尾空单元格 */
+/**
+ * 智能切分一行文本 → 单元格数组
+ *
+ * 这是「粘贴课表纯文本解析不出来」的关键：从网页 / Excel 复制出来的表格，
+ * 单元格之间通常是 Tab 或对齐用的一串空格，只有本程序预处理过的网页表格才是竖线。
+ * 优先级：竖线 | → Tab → 连续空格 / 全角空格 → 单空格（需能切出 3 列以上）。
+ */
+function splitCells(line) {
+  const raw = String(line || '').trim();
+  if (!raw) return [];
+
+  // ① 竖线（本程序预处理后的网页表格、或 Markdown 表格）
+  if (raw.indexOf('|') >= 0 || raw.indexOf('｜') >= 0) {
+    return raw
+      .split(/[|｜]/)
+      .map((cell) => cell.trim())
+      .filter((cell, index, arr) => !(index === 0 && !cell) && !(index === arr.length - 1 && !cell));
+  }
+  // ② Tab（从网页、Excel、WPS 直接复制时最常见）
+  if (raw.indexOf('\t') >= 0) {
+    return raw
+      .split('\t')
+      .map((cell) => cell.trim())
+      .filter(Boolean);
+  }
+  // ③ 两个以上空格或全角空格（对齐排版的纯文本表格）
+  if (/\s{2,}|　/.test(raw)) {
+    return raw
+      .split(/\s{2,}|　/)
+      .map((cell) => cell.trim())
+      .filter(Boolean);
+  }
+  // ④ 单个空格分隔：只有能切出多列时才按空格切，否则整行算一列
+  if (raw.indexOf(' ') >= 0) {
+    const parts = raw
+      .split(/\s+/)
+      .map((cell) => cell.trim())
+      .filter(Boolean);
+    if (parts.length >= 3) return parts;
+  }
+  return [raw];
+}
+
+/** 切分表格行（内部改为智能识别分隔符，兼容 | / Tab / 空格） */
 function splitRow(line) {
-  return String(line || '')
-    .split('|')
-    .map((cell) => cell.trim())
-    .filter((cell, index, arr) => !(index === 0 && !cell) && !(index === arr.length - 1 && !cell));
+  return splitCells(line);
 }
 
 /** 单元格里的多值：10-A301 / 10-A707 / → ['10-A301', '10-A707'] */
@@ -113,35 +175,89 @@ function parseWeeks(text) {
  * "2-9,2-10(单)"   → 周二 第9-10节 单周
  * "任课教师自行安排" → null（跳过）
  */
-function parseSlot(text) {
+function parseSlot(text, fallbackWeekday) {
   const raw = String(text || '').trim();
-  if (!raw || /自行安排|待定|未排|无|暂无/.test(raw)) return null;
+  if (!raw || /自行安排|待定|未排|暂无|^无$/.test(raw)) return null;
 
   const weekType = /单/.test(raw) ? '单周' : /双/.test(raw) ? '双周' : '全周';
+
+  // ① 直接写了钟表时间：08:10-09:50（这种情况不需要节次表换算）
+  const clock = /(\d{1,2}):(\d{2})\s*[-~至]\s*(\d{1,2}):(\d{2})/.exec(raw);
+  if (clock) {
+    const weekday = findWeekday(raw, fallbackWeekday);
+    if (!weekday) return null;
+    return {
+      weekday,
+      startPeriod: 0,
+      endPeriod: 0,
+      weekType,
+      directTime: [padClock(clock[1], clock[2]), padClock(clock[3], clock[4])]
+    };
+  }
+
+  // ② 教务系统常见写法："1-5,1-6"（星期-节次，多个时段用逗号分隔）
   const parts = raw
     .replace(/[（(]/g, ' ')
     .replace(/[)）]/g, ' ')
     .split(/[,，、]/)
     .map((p) => p.trim())
     .filter(Boolean);
-  if (parts.length < 2) return null;
-
-  const first = /(\d+)\s*[-~]\s*(\d+)/.exec(parts[0]);
-  const last = /(\d+)\s*[-~]\s*(\d+)/.exec(parts[parts.length - 1]);
-  if (!first || !last) return null;
-
-  const weekday = Number(first[1]);
-  let startPeriod = Number(first[2]);
-  let endPeriod = Number(last[2]);
-  if (!(weekday >= 1 && weekday <= 7)) return null;
-  if (startPeriod > endPeriod) {
-    const tmp = startPeriod;
-    startPeriod = endPeriod;
-    endPeriod = tmp;
+  if (parts.length >= 2) {
+    const first = /(\d+)\s*[-~]\s*(\d+)/.exec(parts[0]);
+    const last = /(\d+)\s*[-~]\s*(\d+)/.exec(parts[parts.length - 1]);
+    if (first && last) {
+      const weekday = Number(first[1]);
+      let startPeriod = Number(first[2]);
+      let endPeriod = Number(last[2]);
+      if (weekday >= 1 && weekday <= 7 && startPeriod >= 1 && endPeriod <= 12) {
+        if (startPeriod > endPeriod) {
+          const tmp = startPeriod;
+          startPeriod = endPeriod;
+          endPeriod = tmp;
+        }
+        return { weekday, startPeriod, endPeriod, weekType };
+      }
+    }
   }
-  if (!(startPeriod >= 1 && endPeriod <= 12)) return null;
 
-  return { weekday, startPeriod, endPeriod, weekType };
+  // ③ 中文星期 + 节次：周一1-2节 / 星期一 第3-4节 / 1-2节(周一)
+  const weekday = findWeekday(raw, fallbackWeekday);
+  if (!weekday) return null;
+
+  const range = /第?\s*(\d{1,2})\s*[-~至]\s*(\d{1,2})\s*节?/.exec(raw);
+  if (range) {
+    let startPeriod = Number(range[1]);
+    let endPeriod = Number(range[2]);
+    if (startPeriod >= 1 && endPeriod <= 12) {
+      if (startPeriod > endPeriod) {
+        const tmp = startPeriod;
+        startPeriod = endPeriod;
+        endPeriod = tmp;
+      }
+      return { weekday, startPeriod, endPeriod, weekType };
+    }
+  }
+
+  // ④ 只写了单节：第3节 / 3节
+  const single = /第?\s*(\d{1,2})\s*节/.exec(raw);
+  if (single) {
+    const period = Number(single[1]);
+    if (period >= 1 && period <= 12) {
+      return { weekday, startPeriod: period, endPeriod: period, weekType };
+    }
+  }
+  return null;
+}
+
+/** 表头里没有「上课时间」列时，在整行中找第一个看起来像时间的单元格 */
+function findTimeCell(cells, cols) {
+  for (let i = 0; i < cells.length; i++) {
+    if (i === cols.courseName || i === cols.teacher || i === cols.location || i === cols.weeks) continue;
+    if (/(\d+\s*[-~]\s*\d+)|(?:星期|周)\s*[一二三四五六日天1-7]|\d{1,2}:\d{2}/.test(cells[i] || '')) {
+      return cells[i];
+    }
+  }
+  return '';
 }
 
 function parseRow(cells, cols, periodTimes) {
@@ -150,23 +266,36 @@ function parseRow(cells, cols, periodTimes) {
 
   const teacher = cols.teacher >= 0 ? (cells[cols.teacher] || '').trim() : '';
   const rooms = cols.location >= 0 ? splitMulti(cells[cols.location]) : [];
-  const slots = splitMulti(cells[cols.time]);
+  const timeText = cols.time >= 0 ? cells[cols.time] || '' : findTimeCell(cells, cols);
+  const slots = splitMulti(timeText);
   const weeks = parseWeeks(cols.weeks >= 0 ? cells[cols.weeks] : '');
+
+  // 有些学校把星期单独占一列（如「星期一」），时间列里只写节次，这里兜底取一次星期
+  let rowWeekday = null;
+  for (let i = 0; i < cells.length; i++) {
+    if (i === cols.courseName || i === cols.time) continue;
+    const found = findWeekday(cells[i] || '', null);
+    if (found) {
+      rowWeekday = found;
+      break;
+    }
+  }
 
   const list = [];
   slots.forEach((slotText, index) => {
-    const slot = parseSlot(slotText);
+    const slot = parseSlot(slotText, rowWeekday);
     if (!slot) return;
-    const start = periodTimes[slot.startPeriod];
-    const end = periodTimes[slot.endPeriod];
-    if (!start || !end) return;
+    const direct = slot.directTime; // 直接写了钟表时间的，不再查节次表
+    const start = direct ? null : periodTimes[slot.startPeriod];
+    const end = direct ? null : periodTimes[slot.endPeriod];
+    if (!direct && (!start || !end)) return;
     list.push({
       courseName,
       teacher,
       location: rooms[index] || rooms[rooms.length - 1] || '',
       weekday: WEEKDAY_CN[slot.weekday % 7],
-      startTime: start[0],
-      endTime: end[1],
+      startTime: direct ? direct[0] : start[0],
+      endTime: direct ? direct[1] : end[1],
       startWeek: weeks.startWeek,
       endWeek: weeks.endWeek,
       weekType: slot.weekType !== '全周' ? slot.weekType : weeks.weekType,
@@ -205,8 +334,9 @@ function mergeConsecutive(list) {
 }
 
 function parseTable(lines, periodTimes) {
+  // 表头叫法因学校而异：同时出现「课程 / 课名 / 科目」和（时间 / 节次 / 周 / 地点 / 教师）之一即视为表头
   const headerIndex = lines.findIndex(
-    (line) => /课程名称|课程名/.test(line) && /上课时间|节次|时间/.test(line)
+    (line) => /课程|课名|科目/.test(line) && /时间|节次|周|星期|地点|教师|老师/.test(line)
   );
   if (headerIndex < 0) return null;
 
@@ -261,6 +391,8 @@ module.exports = {
   parseSlot,
   parseWeeks,
   splitMulti,
+  splitCells,
+  findWeekday,
   periodTimesOf,
   mergeConsecutive
 };

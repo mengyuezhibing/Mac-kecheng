@@ -3,7 +3,7 @@
 本目录是 Windows 简易版，与 macOS 版（项目根目录的 `main.js`）**共用同一份业务代码**：
 
 - 复用（**未做任何修改**）：上级目录的 `src/`（课表解析与计算）、`renderer/`（界面）、`preload-main.js`、`preload-widget.js`
-- 本目录新增：`main-win.js`（Windows 主进程）、`assets/icon-win.png`（Windows 托盘图标）、`electron-builder-win.json`（Windows 打包配置）
+- 本目录新增：`main-win.js`（Windows 主进程）、`assets/icon.ico` 与 `assets/icon.png`（由 macOS 的 `assets/icon.icns` 提取，图案与 Mac 完全一致）、`assets/widget-bottom.ps1`（小组件置底脚本）、`electron-builder-win.json`（Windows 打包配置）
 
 Mac 版的所有文件都留在项目根目录不动，Windows 版单独放在 `windows/` 下分类管理，
 因此 macOS 上的 `npm start` 行为**完全不受影响**。
@@ -45,9 +45,9 @@ dist/
 | 能力 | macOS | Windows 简易版 |
 | --- | --- | --- |
 | 主窗口 | 无边框隐形标题栏 `hiddenInset` | 标准标题栏（菜单栏自动隐藏，按 `Alt` 可唤出） |
-| 桌面小组件 | 真正沉到桌面图标之下（`type:'desktop'`） | 无边框**置顶**窗口模拟，会浮在其它窗口之上（Windows 没有桌面层级概念） |
+| 桌面小组件 | 真正沉到桌面图标之下（`type:'desktop'`） | 无边框窗口 + 调用 Windows API 压到 **Z 序最底层**，不遮挡其它窗口（Windows 没有桌面层级概念） |
 | 小组件鼠标交互 | 切换桌面层 / 普通层 | 切换是否接收鼠标事件（`focusable`） |
-| 托盘图标 | `assets/icon.icns` | `windows/assets/icon-win.png`（Windows 无法解析 .icns） |
+| 托盘 / 应用图标 | `assets/icon.icns` | `windows/assets/icon.png`、`icon.ico`（从 `icon.icns` 提取，与 Mac 同款图案） |
 | 单击托盘图标 | 显示 / 隐藏小组件 | 打开主窗口（符合 Windows 习惯） |
 | 开机自启 | `openAtLogin` + `openAsHidden` | 仅 `openAtLogin`（写入注册表 Run 项，Windows 不支持隐藏启动） |
 | 关闭主窗口 | 常驻托盘不退出 | 同样常驻托盘（Windows 默认会退出，这里已保持一致） |
@@ -66,6 +66,6 @@ dist/
 
 ## 五、已知限制
 
-1. Windows 没有 macOS 的桌面壁纸层级，小组件是**置顶窗口**，会遮挡其它程序窗口；不需要时可在托盘菜单点「隐藏桌面小组件」。
+1. 小组件置底依赖 Windows API（`SetWindowPos(HWND_BOTTOM)`），由 `windows/assets/widget-bottom.ps1` 调用；若系统禁用 PowerShell 脚本会静默降级为普通窗口（仍不置顶，其它窗口激活后依然会盖住它）。调整位置 / 大小时会临时置顶以方便操作，「完成调整」后自动回到置底状态。
 2. 打包需要 Windows 环境（或配置 Wine）。
-3. `windows/assets/icon-win.png` 是自动生成的简易图标（蓝色圆形 + 白色网格），可换成自己的图标：把 `icon.png` 或 `icon.ico` 放进 `windows/assets/` 即可，代码会优先使用 `icon-win.png`，找不到时依次回退。
+3. 图标 `windows/assets/icon.ico`（16/32/48/64/128/256 全尺寸）与 `icon.png` 均从 macOS 的 `assets/icon.icns` 提取而来，与 Mac 版图案一致；要换成自己的图标，替换这两个文件即可（加载顺序：`icon.png` → `icon.ico` → 上级 `assets/icon.icns`）。
