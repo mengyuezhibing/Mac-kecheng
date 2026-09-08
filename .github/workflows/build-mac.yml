@@ -1,0 +1,64 @@
+name: Build macOS Installer
+
+on:
+  # 手动触发：在 GitHub 网页 Actions 页面点「Run workflow」
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '上传到哪个 Release 标签'
+        required: false
+        default: 'v1.1.0'
+  # 推送 v* 标签时自动构建
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write # 允许上传 Release 附件
+
+jobs:
+  build-macos:
+    runs-on: macos-14 # Apple Silicon 运行器，直接构建 arm64 包
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 使用 Node.js 18
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: 安装依赖
+        run: npm install
+
+      - name: 构建 macOS 安装包（dmg + zip，arm64）
+        run: npx electron-builder --mac --arm64
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: false # 没有 Apple 开发者证书，跳过签名（与本地打包一致）
+
+      - name: 重命名为英文名（规避 GitHub 附件对中文名的编码问题）
+        run: |
+          cd dist
+          for f in Mac简易课程表-*.dmg; do [ -f "$f" ] && mv "$f" "MacKecheng-${f#Mac简易课程表-}"; done
+          for f in Mac简易课程表-*.zip; do [ -f "$f" ] && mv "$f" "MacKecheng-${f#Mac简易课程表-}"; done
+          ls -la
+
+      - name: 上传构建产物（Actions 页面可下载）
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-installer
+          path: |
+            dist/*.dmg
+            dist/*.zip
+          if-no-files-found: error
+
+      - name: 上传安装包到 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
+          files: |
+            dist/*.dmg
+            dist/*.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
