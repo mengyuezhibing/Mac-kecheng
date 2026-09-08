@@ -8,7 +8,9 @@
     "start": "electron .",
     "dev": "electron . --dev",
     "pack": "electron-builder --mac --arm64 --dir",
-    "dist": "electron-builder --mac --arm64"
+    "dist": "electron-builder --mac --arm64",
+    "start:win": "electron windows/main-win.js",
+    "dist:win": "electron-builder --win --x64 --config windows/electron-builder-win.json"
   },
   "devDependencies": {
     "electron": "^30.5.1",

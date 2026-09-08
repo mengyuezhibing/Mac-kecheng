@@ -1,0 +1,36 @@
+{
+  "appId": "com.local.mac-simple-course",
+  "productName": "简易课程表",
+  "copyright": "Copyright © 2026",
+  "extraMetadata": {
+    "main": "windows/main-win.js"
+  },
+  "asar": true,
+  "asarUnpack": ["assets/**/*", "windows/assets/**/*"],
+  "files": [
+    "main.js",
+    "preload-*.js",
+    "src/**/*",
+    "renderer/**/*",
+    "assets/**/*",
+    "windows/**/*",
+    "package.json"
+  ],
+  "win": {
+    "icon": "windows/assets/icon-win.png",
+    "target": [
+      { "target": "nsis", "arch": ["x64"] },
+      { "target": "portable", "arch": ["x64"] }
+    ]
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "artifactName": "${productName}-${version}-setup.${ext}"
+  },
+  "portable": {
+    "artifactName": "${productName}-${version}-portable.${ext}"
+  }
+}
