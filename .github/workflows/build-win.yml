@@ -1,0 +1,50 @@
+name: Build Windows Installer
+
+on:
+  # 手动触发：在 GitHub 网页 Actions 页面点「Run workflow」
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '上传到哪个 Release 标签'
+        required: false
+        default: 'v1.1.0'
+  # 推送 v* 标签时自动构建
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write # 允许上传 Release 附件
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 使用 Node.js 18
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: 安装依赖
+        run: npm install
+
+      - name: 构建 Windows 安装包（NSIS 安装版 + 免安装版）
+        run: npx electron-builder --win --x64 --config windows/electron-builder-win.json
+
+      - name: 上传构建产物（Actions 页面可下载）
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: dist/*.exe
+          if-no-files-found: error
+
+      - name: 上传安装包到 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
+          files: dist/*.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
