@@ -28,9 +28,9 @@
     "allowToChangeInstallationDirectory": true,
     "createDesktopShortcut": true,
     "createStartMenuShortcut": true,
-    "artifactName": "${productName}-${version}-setup.${ext}"
+    "artifactName": "CourseTable-Windows-${version}-setup.${ext}"
   },
   "portable": {
-    "artifactName": "${productName}-${version}-portable.${ext}"
+    "artifactName": "CourseTable-Windows-${version}-portable.${ext}"
   }
 }
