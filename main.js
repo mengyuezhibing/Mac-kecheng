@@ -283,9 +283,31 @@ function persistWidgetBounds() {
 }
 
 /**
+ * 设置小组件窗口层级（仅 macOS 生效）
+ *
+ * 背景：原先使用 type: 'desktop'（kCGDesktopWindowLevel），在部分 macOS 版本上会被静态 / 动态壁纸盖住，
+ * 表现为小组件「消失在壁纸下面」。这里改为普通窗口并显式指定层级：
+ *   展示态 = kCGNormalWindowLevel - 1 → 高于壁纸与桌面图标，低于所有普通应用窗口，
+ *           既不会被壁纸遮挡，也不会遮挡其它应用窗口（效果与原桌面层一致）
+ *   编辑态 = 普通层级，保证能正常拖动 / 缩放 / 右键
+ */
+function applyWidgetWindowLevel() {
+  if (process.platform !== 'darwin' || !widgetWindow || widgetWindow.isDestroyed()) return;
+
+  if (widgetEditMode) {
+    widgetWindow.setAlwaysOnTop(false); // 编辑时回到普通层，便于操作
+    widgetWindow.setIgnoreMouseEvents(false);
+    return;
+  }
+  // level 'normal' = kCGNormalWindowLevel(0)，相对层级 -1 → 最终窗口层级 -1
+  widgetWindow.setAlwaysOnTop(true, 'normal', -1);
+  // 未开启「鼠标交互」时点击穿透，鼠标事件继续传给下层窗口
+  widgetWindow.setIgnoreMouseEvents(!config.widgetInteractive, { forward: true });
+}
+
+/**
  * 创建小组件窗口
- * @param {boolean} editable false = 桌面壁纸层级（type: 'desktop'，不打扰但收不到鼠标事件）
- *                           或开启了 config.widgetInteractive 时 = 普通窗口层级（可点击日期箭头、右键菜单）
+ * @param {boolean} editable false = 展示态（壁纸之上、应用窗口之下；未开启鼠标交互时点击穿透）
  *                           true  = 编辑模式（普通层级，可拖动 / 缩放 / 右键）
  */
 function createWidgetWindow(editable = false) {
@@ -317,8 +339,8 @@ function createWidgetWindow(editable = false) {
     fullscreenable: false,
     show: false,
     title: 'Mac简易课程表',
-    // 开启“鼠标交互”后改为普通窗口层级，这样点击日期箭头、右键菜单才能真正收到鼠标事件
-    type: editable || config.widgetInteractive ? undefined : 'desktop',
+    // 不再使用 type: 'desktop'：macOS 新版本的静态 / 动态壁纸会盖住桌面层级窗口，
+    // 导致小组件被藏在壁纸下面看不见。改为普通窗口，由 applyWidgetWindowLevel() 精确控制层级。
     // 编辑模式下需要可聚焦，才能响应 Esc 与“点击外部自动退出”；
     // 普通 / 交互模式下保持不抢焦点（点击小组件不夺走其它应用的输入焦点）
     focusable: editable,
@@ -336,9 +358,9 @@ function createWidgetWindow(editable = false) {
 
   widgetWindow.loadFile(path.join(__dirname, 'renderer', 'widget.html'));
 
-  // 桌面层级窗口本身跨所有空间；普通层级时也保持跨空间显示
-  // 注意：不要调用 setAlwaysOnTop(false)，它会把窗口层级重置为普通层，导致小组件浮在其他窗口之上
+  // 保持跨所有空间显示（切换桌面/全屏应用时行为不变）
   widgetWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: false });
+  applyWidgetWindowLevel();
 
   widgetWindow.on('moved', persistWidgetBounds);
   widgetWindow.on('resized', persistWidgetBounds);
@@ -372,6 +394,7 @@ function createWidgetWindow(editable = false) {
     } else {
       widgetWindow.showInactive();
     }
+    applyWidgetWindowLevel(); // 显示后再次确认层级与鼠标穿透设置
   });
   widgetWindow.webContents.once('did-finish-load', pushTheme);
 }
@@ -469,8 +492,9 @@ function refreshWidget() {
 
 /**
  * 小组件鼠标交互开关
- * - 关闭：桌面壁纸层级（点击穿透，纯展示，不打扰其它窗口）
- * - 开启：普通窗口层级（可点击切换今天/明天、右键菜单；代价是会被其它应用窗口遮住）
+ * - 关闭：点击穿透（纯展示，鼠标事件直接穿过，不影响桌面上的其它操作）
+ * - 开启：可点击切换今天 / 明天、右键菜单
+ * 两种状态窗口层级相同（壁纸之上、应用窗口之下），都不会遮挡其它应用窗口。
  */
 function setWidgetInteractive(enabled) {
   config.widgetInteractive = !!enabled;
