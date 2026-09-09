@@ -554,8 +554,18 @@ function updateTrayMenu() {
     { label: '查看明天课程', click: () => setWidgetDayOffset(1) },
     { label: '回到今天', click: () => setWidgetDayOffset(0) },
     {
-      label: config.widgetInteractive ? '关闭小组件鼠标交互（回到桌面层）' : '开启小组件鼠标交互（可点击切换日期）',
+      label: config.widgetInteractive ? '关闭小组件鼠标交互（点击穿透）' : '开启小组件鼠标交互（可点击切换日期）',
       click: () => setWidgetInteractive(!config.widgetInteractive)
+    },
+    { type: 'separator' },
+    {
+      label: config.launchAtLogin ? '关闭开机自启' : '开启开机自启（随系统启动）',
+      click: () => {
+        config.launchAtLogin = !config.launchAtLogin;
+        config = store.saveConfig(config);
+        applyLoginItem();
+        updateTrayMenu();
+      }
     },
     { type: 'separator' },
     { label: '退出应用程序', click: () => quitApp() }
@@ -970,10 +980,18 @@ function registerIpc() {
 /* ---------------------------------------------------------------- 启动 */
 
 app.whenReady().then(() => {
+  // 纯菜单栏常驻应用：不在 Dock 中占用图标，只在顶部状态栏保留托盘入口
+  if (process.platform === 'darwin' && app.dock) app.dock.hide();
+
   registerIpc();
   applyLoginItem(); // 与系统登录项保持一致
   createTray();
-  createMainWindow();
+
+  // 随系统启动（登录项）时静默启动：不弹主窗口，直接恢复小组件，像系统小组件一样开箱即用；
+  // 手动打开应用时才显示主配置窗口，方便修改设置。
+  const loginSettings = app.getLoginItemSettings();
+  if (!(loginSettings && loginSettings.wasOpenedAtLogin)) createMainWindow();
+
   // 小组件默认隐藏时不创建窗口（隐藏状态不占渲染进程内存），需要显示时再创建
   if (config.widgetVisible) createWidgetWindow();
 

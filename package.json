@@ -1,6 +1,6 @@
 {
   "name": "mac-simple-course-widget",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "private": true,
   "description": "Mac 课表桌面小组件：Electron 悬浮模拟小组件 + 本机规则解析课表（无需 AI）",
   "main": "main.js",
