@@ -103,7 +103,24 @@ function pushBackground() {
 
 /* -------------------------------------------------------------- 主窗口 */
 
+/** 临时恢复 Dock 图标：代理策略下窗口拿不到键盘焦点，打开主窗口时需要它 */
+function showDockTemporarily() {
+  if (process.platform === 'darwin' && app.dock) app.dock.show();
+}
+
+/** 隐藏 Dock 图标，回到纯状态栏常驻 */
+function hideDock() {
+  if (process.platform === 'darwin' && app.dock) app.dock.hide();
+}
+
+/**
+ * 打开主配置窗口。
+ * 应用被标记为后台代理应用（Info.plist 的 LSUIElement），默认不在 Dock 显示；
+ * 但代理策略下的窗口无法获得键盘焦点（输入框用不了），所以打开主窗口时临时恢复 Dock 图标，
+ * 关闭窗口后再隐藏——这样平时不占 Dock，需要输入配置时功能又完全正常。
+ */
 function createMainWindow() {
+  showDockTemporarily();
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.show();
     mainWindow.focus();
@@ -127,6 +144,7 @@ function createMainWindow() {
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   mainWindow.on('closed', () => {
     mainWindow = null;
+    hideDock(); // 主窗口关闭后重新隐藏，Dock 不再占用图标
   });
   mainWindow.webContents.once('did-finish-load', pushTheme);
   return mainWindow;
@@ -981,7 +999,7 @@ function registerIpc() {
 
 app.whenReady().then(() => {
   // 纯菜单栏常驻应用：不在 Dock 中占用图标，只在顶部状态栏保留托盘入口
-  if (process.platform === 'darwin' && app.dock) app.dock.hide();
+  hideDock();
 
   registerIpc();
   applyLoginItem(); // 与系统登录项保持一致
