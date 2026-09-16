@@ -11,6 +11,7 @@
  */
 const path = require('path');
 const fs = require('fs');
+const { execSync } = require('child_process'); // 用于判断是否为随系统启动（见 isSilentLaunch）
 const {
   app,
   BrowserWindow,
@@ -67,6 +68,46 @@ function currentLoginItemState() {
   } catch (err) {
     return !!config.launchAtLogin;
   }
+}
+
+/**
+ * 判断本次是否应「静默启动」（随系统启动：不弹主窗口，也就不会临时显示 Dock 图标）。
+ *
+ * 只用 app.getLoginItemSettings().wasOpenedAtLogin 在部分环境（尤其是 LSUIElement 后台代理应用）
+ * 并不可靠，会出现「每次开机都弹主窗口」。这里三个条件任一命中即静默：
+ *   ① Electron 报告的 wasOpenedAtLogin / wasOpenedAsHidden
+ *   ② 父进程是 loginwindow（macOS 的登录项由它拉起）
+ *   ③ 系统刚开机不到 3 分钟（正常手动打开不会正好在刚开机时）
+ */
+function isSilentLaunch() {
+  if (process.platform !== 'darwin') return false;
+
+  try {
+    const settings = app.getLoginItemSettings();
+    if (settings && (settings.wasOpenedAtLogin || settings.wasOpenedAsHidden)) return true;
+  } catch (err) {
+    /* 取不到就继续用下面的方式判断 */
+  }
+
+  try {
+    const parent = execSync(`ps -p ${process.ppid} -o comm=`, { timeout: 2000 }).toString().trim();
+    if (/loginwindow/i.test(parent)) return true;
+  } catch (err) {
+    /* 忽略 */
+  }
+
+  try {
+    const boot = execSync('sysctl -n kern.boottime', { timeout: 2000 }).toString();
+    const matched = /sec\s*=\s*(\d+)/.exec(boot);
+    if (matched) {
+      const uptime = Math.floor(Date.now() / 1000) - Number(matched[1]);
+      if (uptime >= 0 && uptime < 180) return true; // 开机 3 分钟内
+    }
+  } catch (err) {
+    /* 忽略 */
+  }
+
+  return false;
 }
 
 /* ------------------------------------------------------------------ 主题 */
@@ -1005,10 +1046,9 @@ app.whenReady().then(() => {
   applyLoginItem(); // 与系统登录项保持一致
   createTray();
 
-  // 随系统启动（登录项）时静默启动：不弹主窗口，直接恢复小组件，像系统小组件一样开箱即用；
+  // 随系统启动时静默启动：不弹主窗口（也就不会临时显示 Dock 图标），直接恢复桌面小组件；
   // 手动打开应用时才显示主配置窗口，方便修改设置。
-  const loginSettings = app.getLoginItemSettings();
-  if (!(loginSettings && loginSettings.wasOpenedAtLogin)) createMainWindow();
+  if (!isSilentLaunch()) createMainWindow();
 
   // 小组件默认隐藏时不创建窗口（隐藏状态不占渲染进程内存），需要显示时再创建
   if (config.widgetVisible) createWidgetWindow();
