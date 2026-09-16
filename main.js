@@ -12,6 +12,7 @@
 const path = require('path');
 const fs = require('fs');
 const { execSync } = require('child_process'); // 用于判断是否为随系统启动（见 isSilentLaunch）
+const updater = require('./src/updater');
 const {
   app,
   BrowserWindow,
@@ -626,6 +627,7 @@ function updateTrayMenu() {
         updateTrayMenu();
       }
     },
+    { label: '检查更新', click: () => updater.checkForUpdates({ manual: true }) },
     { type: 'separator' },
     { label: '退出应用程序', click: () => quitApp() }
   ]);
@@ -783,6 +785,10 @@ function registerIpc() {
     config = store.saveConfig(config);
     applyLoginItem();
     return currentLoginItemState();
+  });
+  ipcMain.handle('app:check-update', () => {
+    updater.checkForUpdates({ manual: true });
+    return { ok: true };
   });
 
   ipcMain.handle('background:get', () => ({
@@ -1052,6 +1058,10 @@ app.whenReady().then(() => {
 
   // 小组件默认隐藏时不创建窗口（隐藏状态不占渲染进程内存），需要显示时再创建
   if (config.widgetVisible) createWidgetWindow();
+
+  // 更新检测：启动后延迟检查一次；之后每 6 小时自动检查，发现新版本会后台下载更新包
+  setTimeout(() => updater.checkForUpdates(), 8000);
+  setInterval(() => updater.checkForUpdates(), 6 * 60 * 60 * 1000);
 
   nativeTheme.on('updated', () => {
     pushTheme();

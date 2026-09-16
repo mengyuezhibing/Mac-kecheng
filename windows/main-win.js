@@ -45,6 +45,7 @@ const store = require('../src/store');
 const schedule = require('../src/schedule');
 const importer = require('../src/importer');
 const { lunarText } = require('../src/lunar');
+const updater = require('../src/updater'); // 更新检测与自动下载（与 macOS 共用）
 
 const CHECK_INTERVAL = 30000; // 通知检测间隔
 
@@ -597,6 +598,8 @@ function updateTrayMenu() {
       click: () => setWidgetInteractive(!config.widgetInteractive)
     },
     { type: 'separator' },
+    { label: '检查更新', click: () => updater.checkForUpdates({ manual: true }) },
+    { type: 'separator' },
     { label: '退出', click: () => quitApp() }
   ]);
   tray.setContextMenu(menu);
@@ -766,6 +769,10 @@ function registerIpc() {
     config = store.saveConfig(config);
     applyLoginItem();
     return currentLoginItemState();
+  });
+  ipcMain.handle('app:check-update', () => {
+    updater.checkForUpdates({ manual: true });
+    return { ok: true };
   });
 
   ipcMain.handle('background:get', () => ({
@@ -1026,6 +1033,10 @@ app.whenReady().then(() => {
   createMainWindow();
   // 小组件默认隐藏时不创建窗口（隐藏状态不占渲染进程内存），需要显示时再创建
   if (config.widgetVisible) createWidgetWindow();
+
+  // 更新检测：启动后延迟检查一次；之后每 6 小时自动检查，发现新版本会后台下载更新包
+  setTimeout(() => updater.checkForUpdates(), 8000);
+  setInterval(() => updater.checkForUpdates(), 6 * 60 * 60 * 1000);
 
   nativeTheme.on('updated', () => {
     pushTheme();
