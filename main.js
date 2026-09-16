@@ -1059,9 +1059,9 @@ app.whenReady().then(() => {
   // 小组件默认隐藏时不创建窗口（隐藏状态不占渲染进程内存），需要显示时再创建
   if (config.widgetVisible) createWidgetWindow();
 
-  // 更新检测：启动后延迟检查一次；之后每 6 小时自动检查，发现新版本会后台下载更新包
-  setTimeout(() => updater.checkForUpdates(), 8000);
-  setInterval(() => updater.checkForUpdates(), 6 * 60 * 60 * 1000);
+  // 更新检测：仅在启动后检查一次（仅提示、不自动下载），之后不再后台轮询，避免频繁打扰。
+  // 用户想更新时，点状态栏菜单「检查更新」即可下载安装。
+  setTimeout(() => updater.checkForUpdates({ silent: true }), 8000);
 
   nativeTheme.on('updated', () => {
     pushTheme();

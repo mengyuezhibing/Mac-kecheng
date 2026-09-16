@@ -3,8 +3,8 @@
  * 轻量更新器（Mac / Windows 通用，不依赖代码签名）
  *
  * 工作方式：
- *   - 检测：调用 GitHub API 读取最新 Release（public repo 匿名即可，仅低频调用）
- *   - 下载：发现新版本后自动在后台下载对应平台的安装包
+ *   - 检测：仅应用启动时检查一次（不再后台定时轮询），发现新版本只发通知提示，不自动下载，避免频繁打扰
+ *   - 下载（手动）：用户点状态栏「检查更新」后才在后台下载对应平台的安装包
  *     （macOS → MacKecheng-*-arm64.dmg；Windows → *-setup.exe）
  *   - 安装引导：下载完成后打开安装包
  *       · macOS 未签名无法静默替换 .app，故打开 dmg 让用户拖拽（一次操作）
@@ -160,6 +160,13 @@ async function checkForUpdates(opts = {}) {
     const asset = pickAsset(release);
     if (!asset) {
       onStatus(`v${latest} 暂无可用的更新包`);
+      return;
+    }
+    // 仅提示模式（启动检查）：发现新版本只发通知，不自动下载，避免频繁打扰。
+    // 用户想更新时，点状态栏/托盘菜单「检查更新」才会真正下载安装。
+    if (opts.silent) {
+      onStatus(`发现新版本 v${latest}`);
+      notify('课程表更新', `已发布新版本 v${latest}，点击状态栏「检查更新」下载安装`);
       return;
     }
     onStatus(`发现新版本 v${latest}，开始下载更新包…`);
