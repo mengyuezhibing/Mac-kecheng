@@ -701,13 +701,10 @@ function createTray() {
   const p2x = path.join(__dirname, 'assets', 'trayTemplate@2x.png');
   const image = nativeImage.createFromPath(p1x);
   try {
+    // 只声明缩放倍率，不指定 width/height —— 由 Electron 从 PNG 自身读取像素尺寸，
+    // 手动指定宽高会让该 representation 失效（图标会完全不渲染）。
     if (fs.existsSync(p2x)) {
-      image.addRepresentation({
-        scaleFactor: 2,
-        width: 18,
-        height: 18,
-        buffer: fs.readFileSync(p2x)
-      });
+      image.addRepresentation({ scaleFactor: 2, buffer: fs.readFileSync(p2x) });
     }
   } catch (err) {
     /* 没有 @2x 就退回 1x 显示 */
@@ -717,6 +714,32 @@ function createTray() {
   tray.setToolTip('Mac简易课程表');
   updateTrayMenu();
   tray.on('click', () => toggleWidget());
+  // 稍后再检测图标是否真的显示出来了（系统摆放位置需要一点时间才确定）
+  setTimeout(checkTrayVisible, 2500);
+}
+
+/**
+ * 检查托盘图标是否真的能被用户看到。
+ *
+ * macOS 菜单栏空间被占满时，系统会把新加入的状态栏图标排到屏幕左侧、并被应用菜单遮住
+ * （实测此时图标坐标落在屏幕左半边，而不是正常状态栏所在的右半边），用户就会觉得
+ * 「图标没有显示」。检测到这种情况时主动提示用户去清理菜单栏，而不是让它无声消失。
+ */
+function checkTrayVisible() {
+  if (!tray || tray.isDestroyed()) return;
+  try {
+    const b = tray.getBounds();
+    const area = screen.getPrimaryDisplay().workArea;
+    if (!b || !b.width) return;
+    if (b.x < area.x + area.width / 2) {
+      new Notification({
+        title: '课程表',
+        body: '顶部菜单栏空间不足，图标被系统隐藏了。可先关闭几个不常用的菜单栏图标，再重新打开本应用。'
+      }).show();
+    }
+  } catch (err) {
+    /* 检测失败不影响正常使用 */
+  }
 }
 
 function showWidgetContextMenu() {

@@ -13,7 +13,7 @@
     "dist:win": "electron-builder --win --x64 --config windows/electron-builder-win.json"
   },
   "devDependencies": {
-    "electron": "^30.5.1",
+    "electron": "^44.7.0",
     "electron-builder": "^24.13.3"
   },
   "engines": {
@@ -25,7 +25,9 @@
     "copyright": "Copyright © 2026",
     "publish": null,
     "asar": true,
-    "asarUnpack": ["assets/**/*"],
+    "asarUnpack": [
+      "assets/**/*"
+    ],
     "files": [
       "main.js",
       "preload-*.js",
@@ -42,8 +44,18 @@
         "LSUIElement": true
       },
       "target": [
-        { "target": "dmg", "arch": ["arm64"] },
-        { "target": "zip", "arch": ["arm64"] }
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64"
+          ]
+        }
       ]
     },
     "dmg": {
