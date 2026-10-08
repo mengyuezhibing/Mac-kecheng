@@ -54,9 +54,19 @@ let lastImportTables = []; // 最近一次导入识别到的表格（排查用�
 /** 根据配置同步“登录项”，使应用随系统启动；系统偏好设置中改动后此处以配置为准 */
 function applyLoginItem() {
   try {
+    const want = !!config.launchAtLogin;
+    // 带上 --hidden：系统登录项拉起应用时明确告知「静默启动」，
+    // 比依赖 wasOpenedAtLogin 判断可靠得多（后台代理应用上后者常常失效，导致开机弹窗、占用 Dock）。
+    const args = want ? ['--hidden'] : [];
+    const current = app.getLoginItemSettings();
+    // macOS 不会因为新增启动参数而重写已存在的登录项，需要先关再开强制刷新一次
+    if (want && current && current.openAtLogin && Array.isArray(current.args) && !current.args.includes('--hidden')) {
+      app.setLoginItemSettings({ openAtLogin: false });
+    }
     app.setLoginItemSettings({
-      openAtLogin: !!config.launchAtLogin,
-      openAsHidden: !!config.launchAtLogin
+      openAtLogin: want,
+      openAsHidden: want,
+      args
     });
   } catch (err) {
     console.warn('[login] 设置登录项失败：', err && err.message);
@@ -75,13 +85,17 @@ function currentLoginItemState() {
  * 判断本次是否应「静默启动」（随系统启动：不弹主窗口，也就不会临时显示 Dock 图标）。
  *
  * 只用 app.getLoginItemSettings().wasOpenedAtLogin 在部分环境（尤其是 LSUIElement 后台代理应用）
- * 并不可靠，会出现「每次开机都弹主窗口」。这里三个条件任一命中即静默：
- *   ① Electron 报告的 wasOpenedAtLogin / wasOpenedAsHidden
- *   ② 父进程是 loginwindow（macOS 的登录项由它拉起）
- *   ③ 系统刚开机不到 3 分钟（正常手动打开不会正好在刚开机时）
+ * 并不可靠，会出现「每次开机都弹主窗口」。这里四个条件任一命中即静默：
+ *   ① 登录项启动时带我们写入的 --hidden 参数（最可靠，applyLoginItem 会保证写入）
+ *   ② Electron 报告的 wasOpenedAtLogin / wasOpenedAsHidden
+ *   ③ 父进程是 loginwindow（macOS 的登录项由它拉起）
+ *   ④ 系统刚开机不到 3 分钟（正常手动打开不会正好在刚开机时）
  */
 function isSilentLaunch() {
   if (process.platform !== 'darwin') return false;
+
+  // ① 登录项拉起时带的标记参数
+  if (process.argv.includes('--hidden') || process.argv.includes('--autostart')) return true;
 
   try {
     const settings = app.getLoginItemSettings();
@@ -156,16 +170,47 @@ function hideDock() {
 }
 
 /**
+ * 让主窗口获得键盘焦点。
+ *
+ * 应用被标记为后台代理应用（Info.plist 的 LSUIElement），平时完全不占程序坞位置。
+ * 以前这里直接 app.dock.show() 来换取焦点，结果是程序坞长期被占位。
+ * 现在优先用系统级激活（app.focus steal），不需要在程序坞出现图标；
+ * 万一某些系统/策略环境下仍拿不到焦点，才把 Dock 图标作为兜底显示出来。
+ */
+function activateMainWindow(win) {
+  if (process.platform !== 'darwin') {
+    win.show();
+    win.focus();
+    return;
+  }
+  try {
+    app.focus({ steal: true });
+  } catch (err) {
+    /* 旧系统不支持 steal 时忽略，走下面的兜底 */
+  }
+  // 后台代理应用（LSUIElement）的窗口默认会压在其它应用窗口之下。这里把它临时抬到
+  // floating 层——属于 GUI 层级，仍能正常接收键盘输入，配合 app.focus 就能显示并编辑，
+  // 从而不需要为了「能输入」而在程序坞里长期占一个图标。
+  try {
+    win.setAlwaysOnTop(true, 'floating');
+  } catch (err) {
+    /* 忽略 */
+  }
+  win.show();
+  win.focus();
+  setTimeout(() => {
+    if (!mainWindow || mainWindow.isDestroyed() || !mainWindow.isVisible()) return;
+    if (!mainWindow.isFocused()) showDockTemporarily(); // 兜底：焦点确实拿不到时才借道 Dock
+  }, 350);
+}
+
+/**
  * 打开主配置窗口。
- * 应用被标记为后台代理应用（Info.plist 的 LSUIElement），默认不在 Dock 显示；
- * 但代理策略下的窗口无法获得键盘焦点（输入框用不了），所以打开主窗口时临时恢复 Dock 图标，
- * 关闭窗口后再隐藏——这样平时不占 Dock，需要输入配置时功能又完全正常。
+ * 静默启动（随系统开机）时不会走到这里，因此开机既不弹窗口也不占程序坞位置。
  */
 function createMainWindow() {
-  showDockTemporarily();
   if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.show();
-    mainWindow.focus();
+    activateMainWindow(mainWindow);
     return mainWindow;
   }
   mainWindow = new BrowserWindow({
@@ -184,11 +229,25 @@ function createMainWindow() {
     }
   });
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+  // 首次创建时页面尚未加载完，此刻激活拿不到焦点，加载完成后再激活一次
+  mainWindow.webContents.once('did-finish-load', () => {
+    pushTheme();
+    activateMainWindow(mainWindow);
+  });
+  // 失焦后降回普通层：否则切换到别的应用时，主窗口会一直悬浮在最上层
+  mainWindow.on('blur', () => {
+    try {
+      mainWindow.setAlwaysOnTop(false);
+    } catch (err) {
+      /* 忽略 */
+    }
+  });
+  // 主窗口只是被隐藏（未关闭）时同样收回 Dock 图标，避免应用在后台还占着程序坞位置
+  mainWindow.on('hide', hideDock);
   mainWindow.on('closed', () => {
     mainWindow = null;
     hideDock(); // 主窗口关闭后重新隐藏，Dock 不再占用图标
   });
-  mainWindow.webContents.once('did-finish-load', pushTheme);
   return mainWindow;
 }
 
@@ -635,10 +694,26 @@ function updateTrayMenu() {
 }
 
 function createTray() {
-  const iconPath = path.join(__dirname, 'assets', 'icon.icns');
-  const image = nativeImage.createFromPath(iconPath);
-  // 托盘使用与 App 一致的软件图标
-  tray = new Tray(image.isEmpty() ? nativeImage.createEmpty() : image);
+  // macOS 菜单栏必须用「模板图标」（纯黑 + Alpha，系统自动适配深/浅色菜单栏）。
+  // 直接把彩色的 app 图标（.icns）塞进托盘会退化成一个看不出内容的灰色圆块，
+  // 因此单独提供 18pt 的单色日历图标，并附加 @2x 让 Retina 下保持清晰。
+  const p1x = path.join(__dirname, 'assets', 'trayTemplate.png');
+  const p2x = path.join(__dirname, 'assets', 'trayTemplate@2x.png');
+  const image = nativeImage.createFromPath(p1x);
+  try {
+    if (fs.existsSync(p2x)) {
+      image.addRepresentation({
+        scaleFactor: 2,
+        width: 18,
+        height: 18,
+        buffer: fs.readFileSync(p2x)
+      });
+    }
+  } catch (err) {
+    /* 没有 @2x 就退回 1x 显示 */
+  }
+  image.setTemplateImage(true);
+  tray = new Tray(image);
   tray.setToolTip('Mac简易课程表');
   updateTrayMenu();
   tray.on('click', () => toggleWidget());
