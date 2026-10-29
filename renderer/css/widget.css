@@ -319,8 +319,14 @@ body.edit-mode .widget {
   display: flex;
   flex-direction: column;
   gap: calc(2px * var(--w-scale));
-  justify-content: space-evenly;
-  overflow: hidden;
+  /* 课程少时整体居中；超出容器高度时自动退化为顶部对齐，保证能完整滚动到第一节 */
+  justify-content: safe center;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  /* 小组件整体是拖拽区（-webkit-app-region: drag），会吞掉鼠标事件，
+     这里显式声明 no-drag，滚轮和滚动条才能正常操作 */
+  -webkit-app-region: no-drag;
 }
 
 .wc-course {

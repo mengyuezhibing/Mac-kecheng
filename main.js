@@ -744,20 +744,35 @@ function checkTrayVisible() {
 
 function showWidgetContextMenu() {
   if (!widgetWindow || widgetWindow.isDestroyed()) return;
-  const menu = Menu.buildFromTemplate([
+  const isWeek = config.widgetMode === 'week';
+  const template = [
     {
-      label: config.widgetMode === 'week' ? '切换为今日课程视图' : '切换为周历视图',
-      click: () => setWidgetMode(config.widgetMode === 'week' ? 'today' : 'week')
-    },
-    {
+      label: isWeek ? '切换为今日课程视图' : '切换为周历视图',
+      click: () => setWidgetMode(isWeek ? 'today' : 'week')
+    }
+  ];
+  // 今天 / 明天 / 后天 的切换只对「今日课程」视图有意义：
+  // 周历一次展示整周，切换日期在周历下点了也没有任何效果，因此不显示。
+  if (!isWeek) {
+    template.push({
       label: (config.widgetDayOffset || 0) > 0 ? '回到今天' : '查看明天课程',
       click: () => setWidgetDayOffset((config.widgetDayOffset || 0) > 0 ? 0 : 1)
+    });
+  }
+  template.push(
+    { type: 'separator' },
+    {
+      // 直接在小部件上右键即可进入 / 退出编辑（拖动、缩放），不用再去状态栏菜单
+      label: widgetEditMode ? '完成调整（小组件沉回桌面）' : '编辑小组件（位置 / 大小）',
+      click: () => (widgetEditMode ? exitWidgetEditMode() : enterWidgetEditMode())
     },
+    { label: '显示应用页面', click: () => createMainWindow() },
+    { type: 'separator' },
     { label: '刷新课表数据', click: () => refreshWidget() },
     { type: 'separator' },
     { label: '关闭小组件', click: () => showWidget(false) }
-  ]);
-  menu.popup({ window: widgetWindow });
+  );
+  Menu.buildFromTemplate(template).popup({ window: widgetWindow });
 }
 
 function quitApp() {
